@@ -25,10 +25,13 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     service = SupabaseService(db)
     try:
         api_logger.info(f"Login attempt for user: {form_data.username}")
-        session = await service.sign_in(email=form_data.username, password=form_data.password)
-        if session and session.access_token and session.user:
+        auth_response = await service.sign_in(email=form_data.username, password=form_data.password)
+        # auth_response is AuthResponse from supabase-py: contains .session and .user
+        if auth_response and getattr(auth_response, 'session', None) and getattr(auth_response.session, 'access_token', None) and getattr(auth_response, 'user', None):
             api_logger.info(f"Login successful for user: {form_data.username}")
-            return {"access_token": session.access_token, "token_type": "bearer", "user": session.user.dict()}
+            # user is a pydantic-like model; use dict() if available
+            user_payload = auth_response.user.dict() if hasattr(auth_response.user, 'dict') else auth_response.user
+            return {"access_token": auth_response.session.access_token, "token_type": "bearer", "user": user_payload}
         
         api_logger.warning(f"Failed login attempt for user: {form_data.username}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
