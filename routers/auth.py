@@ -91,3 +91,22 @@ async def public_signup(user_data: PublicUserCreate, db: Client = Depends(get_db
 
     api_logger.info(f"Public user {user_data.email} created successfully.")
     return new_user
+
+@router.get("/me")
+async def get_me(db: Client = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Return current auth user and linked app profile (public.users).
+    """
+    try:
+        profile_resp = db.table("users").select("display_name, role, avatar_url").eq("id", current_user.id).limit(1).execute()
+        profile = (profile_resp.data[0] if (getattr(profile_resp, 'data', None) and len(profile_resp.data) > 0) else None)
+        return {
+            "user": current_user.dict() if hasattr(current_user, 'dict') else current_user,
+            "profile": profile
+        }
+    except Exception as e:
+        api_logger.error("Failed to fetch profile in /me", error=str(e))
+        return {
+            "user": current_user.dict() if hasattr(current_user, 'dict') else current_user,
+            "profile": None
+        }
