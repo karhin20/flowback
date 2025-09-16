@@ -1,5 +1,5 @@
 # Vercel serverless function entry point
-from main import app
+from index import app
 
 # This is the entry point for Vercel
 handler = app
