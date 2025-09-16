@@ -1,6 +1,6 @@
 from supabase import Client
 from typing import List, Optional, Dict, Any
-from gotrue.types import Session
+from typing import Any
 from models import Customer, CustomerCreate, CustomerUpdate, CustomerAction, CustomerActionCreate, User
 from config import settings
 from utils.logger import db_logger
@@ -340,7 +340,7 @@ class SupabaseService:
             raise DatabaseError(f"Failed to update message template: {e}", "update_template")
 
     # Auth operations
-    async def sign_in(self, email: str, password: str) -> Optional[Session]:
+    async def sign_in(self, email: str, password: str) -> Optional[Any]:
         """Sign in a user using Supabase Auth."""
         try:
             session = self.client.auth.sign_in_with_password({"email": email, "password": password})
