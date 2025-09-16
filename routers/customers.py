@@ -4,7 +4,7 @@ from database import get_db
 from services.supabase_service import SupabaseService
 from models import (
     Customer, CustomerCreate, CustomerUpdate, CustomerFilters, 
-    PaginatedResponse, DashboardData
+    PaginatedResponse, DashboardData, User
 )
 from supabase import Client
 from websocket_manager import websocket_manager
@@ -14,13 +14,14 @@ from utils.errors import (
     create_http_exception, get_user_friendly_message
 )
 from utils.validators import validate_pagination
+from utils.security import get_current_user
 from contextvars import ContextVar
 import uuid
 
 # Context variables
 request_id_var: ContextVar[Optional[str]] = ContextVar('request_id', default=None)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 @router.post("/", response_model=Customer)
 async def create_customer(
