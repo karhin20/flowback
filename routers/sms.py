@@ -19,10 +19,12 @@ async def _send_sms_with_tracking(recipients: List[str], message: str, action_ty
     """Send SMS and track the action in the database."""
     try:
         # Send SMS using centralized service
-        success = await sms_service.send_sms(recipients, message)
+        result = await sms_service.send_sms(recipients, message)
         
-        if not success:
-            raise HTTPException(status_code=502, detail="Failed to send SMS")
+        if not result.get("success", False):
+            error_msg = result.get("error", "Failed to send SMS")
+            api_logger.error(f"SMS sending failed: {error_msg}")
+            raise HTTPException(status_code=502, detail=f"Failed to send SMS: {error_msg}")
         
         # Log the action in database if customer_id provided
         if customer_id:
@@ -34,10 +36,17 @@ async def _send_sms_with_tracking(recipients: List[str], message: str, action_ty
                 "source": "manual"
             })
         
-        api_logger.info(f"SMS sent successfully via {action_type} to {len(recipients)} recipients", 
+        total_recipients = result.get("total_recipients", len(recipients))
+        successful_batches = result.get("successful_batches", 1)
+        
+        api_logger.info(f"SMS sent successfully via {action_type} to {total_recipients} recipients in {successful_batches} batches", 
                        performed_by=performed_by, customer_id=customer_id)
         
-        return {"status": "success", "message": f"SMS sent successfully to {len(recipients)} recipient(s)"}
+        return {
+            "status": "success", 
+            "message": f"SMS sent successfully to {total_recipients} recipient(s)",
+            "details": result
+        }
         
     except HTTPException:
         raise
@@ -52,8 +61,14 @@ async def send_bulk_sms(
     current_user: User = Depends(get_current_user)
 ):
     """Send bulk SMS to multiple recipients."""
+    api_logger.info(f"📱 SMS send-bulk endpoint called by {current_user.email}", 
+                   recipients=len(request.recipients), 
+                   message_length=len(request.message))
+    
     if not sms_service.api_key or not sms_service.sender_id:
-        api_logger.error("SMS service not configured")
+        api_logger.error("SMS service not configured", 
+                        api_key_set=bool(sms_service.api_key),
+                        sender_id_set=bool(sms_service.sender_id))
         raise HTTPException(status_code=500, detail="SMS service is not configured")
 
     if not request.recipients:
@@ -63,15 +78,24 @@ async def send_bulk_sms(
         raise HTTPException(status_code=400, detail="Maximum 1000 recipients allowed per bulk SMS")
 
     try:
-        success = await sms_service.send_sms(request.recipients, request.message)
+        result = await sms_service.send_sms(request.recipients, request.message)
         
-        if not success:
-            raise HTTPException(status_code=502, detail="Failed to send bulk SMS")
+        if not result.get("success", False):
+            error_msg = result.get("error", "Failed to send bulk SMS")
+            api_logger.error(f"Bulk SMS sending failed: {error_msg}")
+            raise HTTPException(status_code=502, detail=f"Failed to send bulk SMS: {error_msg}")
         
-        api_logger.info(f"Bulk SMS sent to {len(request.recipients)} recipients", 
+        total_recipients = result.get("total_recipients", len(request.recipients))
+        successful_batches = result.get("successful_batches", 1)
+        
+        api_logger.info(f"Bulk SMS sent to {total_recipients} recipients in {successful_batches} batches", 
                        performed_by=current_user.email)
         
-        return {"status": "success", "message": f"SMS sent to {len(request.recipients)} recipients"}
+        return {
+            "status": "success", 
+            "message": f"SMS sent to {total_recipients} recipients",
+            "details": result
+        }
         
     except HTTPException:
         raise
@@ -219,3 +243,83 @@ async def get_sms_status(
         except Exception as e:
             api_logger.error(f"SMS status check error: {e}")
             raise HTTPException(status_code=500, detail="Internal error occurred while checking SMS status")
+
+@router.post("/send-scheduled", status_code=200)
+async def send_scheduled_sms(
+    request: dict,  # {"recipients": List[str], "message": str, "scheduled_date": str}
+    db: Client = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Send scheduled SMS using Arkesel API."""
+    if not sms_service.api_key or not sms_service.sender_id:
+        api_logger.error("SMS service not configured")
+        raise HTTPException(status_code=500, detail="SMS service is not configured")
+
+    if not request.get("recipients") or not request.get("message") or not request.get("scheduled_date"):
+        raise HTTPException(status_code=400, detail="recipients, message, and scheduled_date are required")
+
+    try:
+        result = await sms_service.send_scheduled_sms(
+            request["recipients"], 
+            request["message"], 
+            request["scheduled_date"]
+        )
+        
+        if not result.get("success", False):
+            error_msg = result.get("error", "Failed to schedule SMS")
+            raise HTTPException(status_code=502, detail=f"Failed to schedule SMS: {error_msg}")
+        
+        api_logger.info(f"Scheduled SMS created for {len(request['recipients'])} recipients", 
+                       performed_by=current_user.email, scheduled_date=request["scheduled_date"])
+        
+        return {
+            "status": "success", 
+            "message": f"SMS scheduled for {len(request['recipients'])} recipients",
+            "details": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        api_logger.error(f"Scheduled SMS error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal error occurred while scheduling SMS")
+
+@router.post("/send-webhook", status_code=200)
+async def send_sms_with_webhook(
+    request: dict,  # {"recipients": List[str], "message": str, "callback_url": str}
+    db: Client = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Send SMS with delivery webhook using Arkesel API."""
+    if not sms_service.api_key or not sms_service.sender_id:
+        api_logger.error("SMS service not configured")
+        raise HTTPException(status_code=500, detail="SMS service is not configured")
+
+    if not request.get("recipients") or not request.get("message") or not request.get("callback_url"):
+        raise HTTPException(status_code=400, detail="recipients, message, and callback_url are required")
+
+    try:
+        result = await sms_service.send_sms_with_webhook(
+            request["recipients"], 
+            request["message"], 
+            request["callback_url"]
+        )
+        
+        if not result.get("success", False):
+            error_msg = result.get("error", "Failed to send SMS with webhook")
+            raise HTTPException(status_code=502, detail=f"Failed to send SMS with webhook: {error_msg}")
+        
+        api_logger.info(f"SMS with webhook sent to {len(request['recipients'])} recipients", 
+                       performed_by=current_user.email, callback_url=request["callback_url"])
+        
+        return {
+            "status": "success", 
+            "message": f"SMS with webhook sent to {len(request['recipients'])} recipients",
+            "details": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        api_logger.error(f"SMS with webhook error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal error occurred while sending SMS with webhook")

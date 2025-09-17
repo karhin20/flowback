@@ -166,18 +166,26 @@ async def update_customer(
 ):
     """Update a customer"""
     try:
+        # Log the incoming data for debugging
+        api_logger.info(f"Updating customer {customer_id} with data: {customer_update.dict()}")
+        
         service = SupabaseService(db)
         customer = await service.update_customer(customer_id, customer_update)
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
         
-        # Broadcast WebSocket update
+        # Broadcast WebSocket updates
         await websocket_manager.broadcast_customer_updated(customer.dict())
+        
+        # Broadcast dashboard update
+        dashboard_data = await service.get_dashboard_data()
+        await websocket_manager.broadcast_dashboard_updated(dashboard_data)
         
         return customer
     except HTTPException:
         raise
     except Exception as e:
+        api_logger.error(f"Error updating customer {customer_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{customer_id}")

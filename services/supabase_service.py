@@ -166,15 +166,21 @@ class SupabaseService:
         """Update a customer"""
         try:
             update_data = {k: v for k, v in customer_data.dict().items() if v is not None}
+            db_logger.info(f"Updating customer {customer_id} with data: {update_data}")
+            
             if not update_data:
+                db_logger.info(f"No data to update for customer {customer_id}")
                 return await self.get_customer(customer_id)
             
             result = self.client.table("customers").update(update_data).eq("id", customer_id).execute()
             if result.data:
+                db_logger.info(f"Successfully updated customer {customer_id}")
                 return Customer(**result.data[0])
-            return None
+            else:
+                db_logger.warning(f"No data returned when updating customer {customer_id}")
+                return None
         except Exception as e:
-            db_logger.error(f"Error updating customer: {e}", customer_id=customer_id)
+            db_logger.error(f"Error updating customer: {e}", customer_id=customer_id, update_data=update_data)
             raise DatabaseError(f"Error updating customer: {str(e)}", "update")
 
     async def delete_customer(self, customer_id: str) -> bool:
@@ -215,8 +221,22 @@ class SupabaseService:
     async def get_customer_actions(self, customer_id: str = None, page: int = 1, limit: int = 50) -> List[dict]:
         """Get customer actions with optional customer filter"""
         try:
-            # Join with customers table to get name and account number
-            query = self.client.table("customer_actions").select("*, customer:customers(name, account_number)")
+            # Use proper foreign key join syntax for Supabase
+            query = self.client.table("customer_actions").select(
+                """
+                id,
+                customer_id,
+                action,
+                performed_by,
+                source,
+                batch_id,
+                timestamp,
+                customers!customer_actions_customer_id_fkey(
+                    name,
+                    account_number
+                )
+                """
+            )
             
             if customer_id:
                 query = query.eq("customer_id", customer_id)
@@ -231,11 +251,18 @@ class SupabaseService:
             actions = []
             if result.data:
                 for row in result.data:
-                    customer_details = row.pop('customer', {}) or {}
+                    # Extract customer data from the joined customers table
+                    customer_data = row.get('customers', {}) or {}
                     action_data = {
-                        **row,
-                        "customer": customer_details.get("name") if customer_details else None,
-                        "account_number": customer_details.get("account_number") if customer_details else None,
+                        "id": row.get("id"),
+                        "customer_id": row.get("customer_id"),
+                        "action": row.get("action"),
+                        "performed_by": row.get("performed_by"),
+                        "source": row.get("source"),
+                        "batch_id": row.get("batch_id"),
+                        "timestamp": row.get("timestamp"),
+                        "customer": customer_data.get("name") if customer_data else None,
+                        "account_number": customer_data.get("account_number") if customer_data else None,
                     }
                     actions.append(action_data)
             return actions
@@ -258,21 +285,35 @@ class SupabaseService:
             warned = len([c for c in customers_data if c["status"] == "warned"])
             
             # Calculate total arrears
-            total_arrears = sum(float(c["arrears"]) for c in customers_data if c["arrears"])
+            total_arrears = sum(
+                float(c["arrears"]) for c in customers_data 
+                if c["arrears"] and c["arrears"] != "" and c["arrears"] is not None
+            )
             
-            # Get recent actions
-            recent_actions_result = self.client.table("customer_actions").select("*, customer:customers(name, account_number)").order("timestamp", desc=True).limit(10).execute()
+            # Get recent actions with the SAME join style used by history/audit trails
+            # Use alias relation: customer:customers(name, account_number)
+            recent_actions_result = self.client.table("customer_actions").select(
+                "id, customer_id, action, performed_by, source, batch_id, timestamp, customer:customers(name, account_number)"
+            ).order("timestamp", desc=True).limit(10).execute()
             recent_actions_data = recent_actions_result.data or []
-            
+
             recent_actions = []
-            for row in recent_actions_data:
-                customer_details = row.pop('customer', {}) or {}
-                action_data = {
-                    **row,
-                    "customer": customer_details.get("name") if customer_details else None,
-                    "account_number": customer_details.get("account_number") if customer_details else None,
-                }
-                recent_actions.append(action_data)
+            if recent_actions_data:
+                for row in recent_actions_data:
+                    # Match history approach: relation is under key 'customer'
+                    customer_rel = row.get('customer', {}) or {}
+                    action_data = {
+                        "id": row.get("id"),
+                        "customer_id": row.get("customer_id"),
+                        "action": row.get("action"),
+                        "performed_by": row.get("performed_by"),
+                        "source": row.get("source"),
+                        "batch_id": row.get("batch_id"),
+                        "timestamp": row.get("timestamp"),
+                        "customer": customer_rel.get("name") if customer_rel else None,
+                        "account_number": customer_rel.get("account_number") if customer_rel else None,
+                    }
+                    recent_actions.append(action_data)
             
             return {
                 "total_customers": total_customers,
@@ -302,11 +343,10 @@ class SupabaseService:
             db_logger.error(f"Error creating batch customers: {e}")
             raise DatabaseError(f"Error creating batch customers: {str(e)}", "insert")
 
-    async def create_batch_actions(self, actions: List[CustomerActionCreate]) -> List[CustomerAction]:
+    async def create_batch_actions(self, actions_data: List[dict]) -> List[CustomerAction]:
         """Create multiple actions in a batch"""
         try:
-            # Convert Pydantic objects to dictionaries
-            actions_data = [action.dict() for action in actions]
+            # actions_data is already a list of dictionaries
             result = self.client.table("customer_actions").insert(actions_data).execute()
             return [CustomerAction(**row) for row in result.data]
         except Exception as e:

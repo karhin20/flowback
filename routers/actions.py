@@ -18,10 +18,20 @@ async def create_action(
     """Create a new customer action"""
     try:
         service = SupabaseService(db)
-        new_action = await service.create_action(action)
         
-        # Broadcast WebSocket update
+        # Override performed_by with current user information if not provided or if it's a generic value
+        action_data = action.dict()
+        if not action_data.get('performed_by') or action_data.get('performed_by') in ['batch_upload', 'System', 'Unknown User']:
+            action_data['performed_by'] = current_user.user_metadata.get('name') or current_user.email or "System"
+        
+        new_action = await service.create_action(action_data)
+        
+        # Broadcast WebSocket updates
         await websocket_manager.broadcast_action_created(new_action.dict())
+        
+        # Broadcast dashboard update
+        dashboard_data = await service.get_dashboard_data()
+        await websocket_manager.broadcast_dashboard_updated(dashboard_data)
         
         return new_action
     except Exception as e:
@@ -82,7 +92,17 @@ async def create_batch_actions(
     """Create multiple actions in a batch"""
     try:
         service = SupabaseService(db)
-        new_actions = await service.create_batch_actions(actions)
+        
+        # Override performed_by with current user information for all actions
+        user_name = current_user.user_metadata.get('name') or current_user.email or "System"
+        actions_data = []
+        for action in actions:
+            action_dict = action.dict()
+            if not action_dict.get('performed_by') or action_dict.get('performed_by') in ['batch_upload', 'System', 'Unknown User']:
+                action_dict['performed_by'] = user_name
+            actions_data.append(action_dict)
+        
+        new_actions = await service.create_batch_actions(actions_data)
         
         # Broadcast WebSocket updates for each action
         for action in new_actions:

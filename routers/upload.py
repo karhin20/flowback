@@ -151,7 +151,9 @@ async def process_batch_upload(
             try:
                 created_customers = await service.create_batch_customers(new_customer_models)
                 for customer in created_customers:
-                    actions_to_create.append(CustomerActionCreate(customer_id=customer.id, action="connect", performed_by="batch_upload", source="batch", batch_id=batch_request.batch_id))
+                    # Use current user's display name or email for performed_by
+                    performed_by = current_user.user_metadata.get('name') or current_user.email or "System"
+                    actions_to_create.append(CustomerActionCreate(customer_id=customer.id, action="connect", performed_by=performed_by, source="batch", batch_id=batch_request.batch_id))
             except Exception as e:
                 api_logger.error("Batch customer creation failed", error=e, batch_id=batch_request.batch_id)
                 processing_errors.append({"row": "N/A", "error": f"Batch creation failed: {e}", "data": {}})
@@ -165,7 +167,9 @@ async def process_batch_upload(
                     update_payload = CustomerUpdate(status="connected", arrears=item_data.arrears)
                     await service.update_customer(customer_id, update_payload)
                     updated_customer_ids.append(customer_id)
-                    actions_to_create.append(CustomerActionCreate(customer_id=customer_id, action="connect", performed_by="batch_upload", source="batch", batch_id=batch_request.batch_id))
+                    # Use current user's display name or email for performed_by
+                    performed_by = current_user.user_metadata.get('name') or current_user.email or "System"
+                    actions_to_create.append(CustomerActionCreate(customer_id=customer_id, action="connect", performed_by=performed_by, source="batch", batch_id=batch_request.batch_id))
                 except Exception as e:
                     api_logger.error(f"Failed to update customer {customer_id} in batch", error=e, batch_id=batch_request.batch_id)
                     processing_errors.append({"row": item_data.row, "error": f"Update failed: {e}", "data": item_data.dict()})

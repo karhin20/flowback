@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_prefix: str = "/api"
-    cors_origins: List[str] = Field("https://gwlcustomers.vercel.app", env="ALLOWED_ORIGINS")
-    frontend_url: str = "http://localhost:8080"
+    cors_origins: List[str] = Field(["https://gwlcustomers.vercel.app", "http://localhost:8080", "http://localhost:3000", "http://localhost:5173"], env="ALLOWED_ORIGINS")
+    frontend_url: str = "https://gwlcustomers.vercel.app"
     email_redirect_path: str = "/auth/callback"
     
     # Database Configuration
