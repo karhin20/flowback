@@ -7,7 +7,7 @@ from services.supabase_service import SupabaseService
 from models import User
 from utils.logger import api_logger
 from utils.security import get_current_user
-from config import settings
+from config.settings import settings
 
 router = APIRouter()
 

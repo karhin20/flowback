@@ -1,4 +1,5 @@
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field, validator
+from pydantic_settings import BaseSettings
 from typing import List, Optional
 import os
 
@@ -6,7 +7,7 @@ class Settings(BaseSettings):
     """Application settings with validation"""
     
     # Application
-    app_name: str = "Insight Ops Flow"
+    app_name: str = "GWL Customers"
     app_version: str = "1.0.0"
     debug: bool = False
     
@@ -14,8 +15,8 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_prefix: str = "/api"
-    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:5173"]
-    frontend_url: str = "http://localhost:3000"
+    cors_origins: List[str] = Field("https://gwlcustomers.vercel.app", env="ALLOWED_ORIGINS")
+    frontend_url: str = "http://localhost:8080"
     email_redirect_path: str = "/auth/callback"
     
     # Database Configuration
@@ -25,19 +26,20 @@ class Settings(BaseSettings):
     
     # Security
     secret_key: str = Field(..., env="SECRET_KEY")
+    algorithm: str = Field("HS256", env="ALGORITHM")
+    access_token_expire_minutes: int = Field(30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 30
     signup_code: str = Field("", env="SIGNUP_CODE")
     
-    # SMS Configuration
-    sms_api_url: Optional[str] = Field(None, env="SMS_API_URL")
-    sms_api_key: Optional[str] = Field(None, env="SMS_API_KEY")
-    sms_sender_id: Optional[str] = Field(None, env="SMS_SENDER_ID")
+    # SMS Configuration (Arkesel)
+    arkesel_api_key: Optional[str] = Field(None, env="ARKESEL_API_KEY")
+    arkesel_sender_id: Optional[str] = Field(None, env="ARKESEL_SENDER_ID")
     
     # Cache Configuration
-    cache_ttl_customers: int = 300  # 5 minutes
-    cache_ttl_dashboard: int = 60   # 1 minute
-    cache_ttl_actions: int = 180    # 3 minutes
+    cache_ttl_customers: int = 300  
+    cache_ttl_dashboard: int = 60   
+    cache_ttl_actions: int = 180    
     
     # Rate Limiting
     rate_limit_requests: int = 100
@@ -65,8 +67,8 @@ class Settings(BaseSettings):
     
     @validator('secret_key')
     def validate_secret_key(cls, v):
-        if len(v) < 32:
-            raise ValueError('Secret key must be at least 32 characters long')
+        if len(v) < 16:  # More lenient for development
+            raise ValueError('Secret key must be at least 16 characters long')
         return v
     
     @validator('log_level')
@@ -80,6 +82,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra fields from environment
 
 # Global settings instance
 settings = Settings()

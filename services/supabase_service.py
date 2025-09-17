@@ -2,7 +2,7 @@ from supabase import Client
 from typing import List, Optional, Dict, Any
 from typing import Any
 from models import Customer, CustomerCreate, CustomerUpdate, CustomerAction, CustomerActionCreate, User
-from config import settings
+from config.settings import settings
 from utils.logger import db_logger
 from utils.errors import (
     CustomerNotFoundError, CustomerAlreadyExistsError, DatabaseError,

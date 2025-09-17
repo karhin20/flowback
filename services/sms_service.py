@@ -1,15 +1,15 @@
 """
 SMS Service using Arkesel
 """
-import os
 import httpx
 from typing import List, Optional, Dict, Any
 from utils.logger import api_logger
+from config.settings import settings
 
 class SMSService:
     def __init__(self):
-        self.api_key = os.getenv("ARKESEL_API_KEY", "")
-        self.sender_id = os.getenv("ARKESEL_SENDER_ID", "")
+        self.api_key = settings.arkesel_api_key or ""
+        self.sender_id = settings.arkesel_sender_id or ""
         self.base_url = "https://sms.arkesel.com/api/v2/sms/send"
         self.status_url = "https://sms.arkesel.com/api/v2/sms"
     

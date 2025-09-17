@@ -7,14 +7,13 @@ from dotenv import load_dotenv
 
 from database import init_db
 from routers import customers, actions, sms, upload, websocket, templates, auth
-from config import settings
+from config.settings import settings
 
 # Load environment variables
 load_dotenv()
 
-# Validate configuration
-if not settings.validate():
-    raise ValueError("Configuration validation failed. Please check your environment variables.")
+# Configuration is automatically validated when settings is instantiated
+# No need for manual validation
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,7 +33,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
