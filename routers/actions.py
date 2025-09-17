@@ -22,7 +22,14 @@ async def create_action(
         # Override performed_by with current user information if not provided or if it's a generic value
         action_data = action.dict()
         if not action_data.get('performed_by') or action_data.get('performed_by') in ['batch_upload', 'System', 'Unknown User']:
-            action_data['performed_by'] = current_user.user_metadata.get('name') or current_user.email or "System"
+            user_meta = getattr(current_user, 'user_metadata', {}) or {}
+            display_name = (
+                user_meta.get('name') or
+                user_meta.get('full_name') or
+                user_meta.get('display_name') or
+                user_meta.get('displayName')
+            )
+            action_data['performed_by'] = display_name or current_user.email or "System"
         
         new_action = await service.create_action(action_data)
         
@@ -94,7 +101,14 @@ async def create_batch_actions(
         service = SupabaseService(db)
         
         # Override performed_by with current user information for all actions
-        user_name = current_user.user_metadata.get('name') or current_user.email or "System"
+        user_meta = getattr(current_user, 'user_metadata', {}) or {}
+        user_name = (
+            user_meta.get('name') or
+            user_meta.get('full_name') or
+            user_meta.get('display_name') or
+            user_meta.get('displayName') or
+            current_user.email or "System"
+        )
         actions_data = []
         for action in actions:
             action_dict = action.dict()

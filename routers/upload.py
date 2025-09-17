@@ -152,7 +152,14 @@ async def process_batch_upload(
                 created_customers = await service.create_batch_customers(new_customer_models)
                 for customer in created_customers:
                     # Use current user's display name or email for performed_by
-                    performed_by = current_user.user_metadata.get('name') or current_user.email or "System"
+                    user_meta = getattr(current_user, 'user_metadata', {}) or {}
+                    performed_by = (
+                        user_meta.get('name') or
+                        user_meta.get('full_name') or
+                        user_meta.get('display_name') or
+                        user_meta.get('displayName') or
+                        current_user.email or "System"
+                    )
                     actions_to_create.append({
                         "customer_id": customer.id,
                         "action": "connect",
@@ -174,7 +181,14 @@ async def process_batch_upload(
                     await service.update_customer(customer_id, update_payload)
                     updated_customer_ids.append(customer_id)
                     # Use current user's display name or email for performed_by
-                    performed_by = current_user.user_metadata.get('name') or current_user.email or "System"
+                    user_meta = getattr(current_user, 'user_metadata', {}) or {}
+                    performed_by = (
+                        user_meta.get('name') or
+                        user_meta.get('full_name') or
+                        user_meta.get('display_name') or
+                        user_meta.get('displayName') or
+                        current_user.email or "System"
+                    )
                     actions_to_create.append({
                         "customer_id": customer_id,
                         "action": "connect",
