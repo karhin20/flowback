@@ -7,6 +7,7 @@ from services.supabase_service import SupabaseService
 from models import User
 from utils.logger import api_logger
 from utils.security import get_current_user
+from config import settings
 
 router = APIRouter()
 
@@ -15,6 +16,20 @@ class UserCreate(BaseModel):
     password: str
     name: str
     role: str = 'user'
+    signup_code: str
+
+class SignupCodeVerify(BaseModel):
+    code: str
+
+def verify_signup_code(code: str) -> bool:
+    """
+    Verify the signup code against the configured signup code.
+    """
+    if not settings.signup_code:
+        api_logger.warning("SIGNUP_CODE not configured in settings")
+        return False
+    
+    return code == settings.signup_code
 
 @router.post("/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Client = Depends(get_db)):
@@ -70,14 +85,24 @@ class PublicUserCreate(BaseModel):
     password: str
     name: str
     role: str = 'user'
+    signup_code: str
 
 @router.post("/signup", response_model=User, status_code=status.HTTP_201_CREATED)
 async def public_signup(user_data: PublicUserCreate, db: Client = Depends(get_db)):
     """
     Public signup endpoint for creating a new account.
+    Requires a valid signup code for authentication.
     """
     service = SupabaseService(db)
     api_logger.info(f"Public user signup attempt for: {user_data.email}")
+
+    # Verify signup code first
+    if not verify_signup_code(user_data.signup_code):
+        api_logger.warning(f"Invalid signup code provided for: {user_data.email}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid signup code. Please contact administrator for a valid code."
+        )
 
     user_metadata = {"name": user_data.name, "role": user_data.role}
     new_user = await service.sign_up(email=user_data.email, password=user_data.password, data=user_metadata)
@@ -89,8 +114,23 @@ async def public_signup(user_data: PublicUserCreate, db: Client = Depends(get_db
             detail="Could not create user. The email might already be in use."
         )
 
-    api_logger.info(f"Public user {user_data.email} created successfully.")
+    api_logger.info(f"Public user {user_data.email} created successfully with valid signup code.")
     return new_user
+
+@router.post("/verify-signup-code")
+async def verify_signup_code_endpoint(code_data: SignupCodeVerify):
+    """
+    Verify a signup code without creating a user.
+    """
+    is_valid = verify_signup_code(code_data.code)
+    
+    if is_valid:
+        return {"valid": True, "message": "Signup code is valid"}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid signup code. Please contact administrator for a valid code."
+        )
 
 @router.get("/me")
 async def get_me(db: Client = Depends(get_db), current_user: User = Depends(get_current_user)):

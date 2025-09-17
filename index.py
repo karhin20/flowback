@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 
 from database import init_db
 from routers import customers, actions, sms, upload, websocket, templates, auth
-from services.sms_service import SMSService
 from config import settings
 
 # Load environment variables
@@ -16,9 +15,6 @@ load_dotenv()
 # Validate configuration
 if not settings.validate():
     raise ValueError("Configuration validation failed. Please check your environment variables.")
-
-# Initialize services
-sms_service = SMSService()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

@@ -1,109 +1,99 @@
-import httpx
+"""
+SMS Service using Arkesel
+"""
 import os
-import logging
-from typing import Optional, Dict, Any
-from datetime import datetime
-from models import SMSRequest, SMSResponse
-
-logger = logging.getLogger(__name__)
+import httpx
+from typing import List, Optional, Dict, Any
+from utils.logger import api_logger
 
 class SMSService:
     def __init__(self):
-        self.api_url = os.getenv("SMS_API_URL")
-        self.api_key = os.getenv("SMS_API_KEY")
-        self.sender_id = os.getenv("SMS_SENDER_ID")
+        self.api_key = os.getenv("ARKESEL_API_KEY", "")
+        self.sender_id = os.getenv("ARKESEL_SENDER_ID", "")
+        self.base_url = "https://sms.arkesel.com/api/v2/sms/send"
+        self.status_url = "https://sms.arkesel.com/api/v2/sms"
+    
+    async def send_sms(self, recipients: List[str], message: str) -> bool:
+        """Send SMS to multiple recipients using Arkesel with batching for large volumes"""
+        if not self.api_key or not self.sender_id:
+            api_logger.error("Arkesel SMS credentials not configured")
+            return False
         
-        if not all([self.api_url, self.api_key, self.sender_id]):
-            logger.warning("SMS service not fully configured. Some features may not work.")
-
-    async def send_sms(self, phone: str, message: str, include_arrears: bool = True, arrears: str = None) -> SMSResponse:
-        """Send SMS to a phone number"""
+        # Arkesel typically handles up to 1000 recipients per request
+        # For larger volumes, we'll batch them
+        batch_size = 1000
+        total_recipients = len(recipients)
+        successful_batches = 0
+        
         try:
-            if not self.api_url or not self.api_key:
-                raise Exception("SMS service not configured")
-            
-            # Format message with arrears if requested
-            if include_arrears and arrears:
-                message = f"{message}\n\nArrears: {arrears}"
-            
-            # Prepare SMS payload
-            payload = {
-                "to": phone,
-                "message": message,
-                "sender_id": self.sender_id
-            }
-            
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.api_url}/send",
-                    json=payload,
-                    headers=headers,
-                    timeout=30.0
-                )
+            for i in range(0, total_recipients, batch_size):
+                batch = recipients[i:i + batch_size]
                 
-                if response.status_code == 200:
-                    result = response.json()
-                    return SMSResponse(
-                        message_id=result.get("message_id", "unknown"),
-                        status="sent",
-                        sent_at=datetime.now()
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        self.base_url,
+                        json={
+                            "sender": self.sender_id,
+                            "message": message,
+                            "recipients": batch
+                        },
+                        headers={
+                            "api-key": self.api_key,
+                            "Content-Type": "application/json"
+                        },
+                        timeout=60.0  # Longer timeout for large batches
                     )
-                else:
-                    logger.error(f"SMS API error: {response.status_code} - {response.text}")
-                    raise Exception(f"SMS sending failed: {response.status_code}")
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        api_logger.info(f"SMS batch {i//batch_size + 1} sent successfully to {len(batch)} recipients")
+                        successful_batches += 1
+                    else:
+                        api_logger.error(f"SMS batch {i//batch_size + 1} failed", 
+                                       status_code=response.status_code, 
+                                       response=response.text)
+                        return False
+                
+                # Small delay between batches to avoid overwhelming the API
+                if i + batch_size < total_recipients:
+                    import asyncio
+                    await asyncio.sleep(0.5)
+            
+            api_logger.info(f"All SMS batches sent successfully: {successful_batches} batches, {total_recipients} total recipients")
+            return True
                     
         except Exception as e:
-            logger.error(f"Error sending SMS: {e}")
-            raise
-
-    async def send_warning_sms(self, customer_name: str, phone: str, arrears: str) -> SMSResponse:
-        """Send warning SMS with arrears information"""
-        message = (
-            f"Dear Customer, you are reminded to settle your arrears of {arrears} to avoid disconnection."
-        )
-        return await self.send_sms(phone, message, include_arrears=True, arrears=arrears)
-
-    async def send_disconnection_sms(self, customer_name: str, phone: str, arrears: str) -> SMSResponse:
-        """Send disconnection SMS with arrears information"""
-        message = (
-            f"Dear Customer, due to arrears of {arrears}, your service has been disconnected."
-        )
-        return await self.send_sms(phone, message, include_arrears=True, arrears=arrears)
-
-    async def send_connection_sms(self, customer_name: str, phone: str) -> SMSResponse:
-        """Send connection confirmation SMS"""
-        message = f"Dear {customer_name},\n\nYour service has been successfully connected. Thank you for your payment."
-        return await self.send_sms(phone, message, include_arrears=False)
-
-    async def get_sms_status(self, message_id: str) -> Dict[str, Any]:
-        """Get SMS delivery status"""
+            api_logger.error(f"SMS sending error: {str(e)}")
+            return False
+    
+    async def send_single_sms(self, phone: str, message: str) -> bool:
+        """Send SMS to a single recipient"""
+        return await self.send_sms([phone], message)
+    
+    async def get_sms_status(self, message_id: str) -> Optional[Dict[str, Any]]:
+        """Get SMS delivery status from Arkesel"""
+        if not self.api_key:
+            api_logger.error("Arkesel API key not configured")
+            return None
+        
         try:
-            if not self.api_url or not self.api_key:
-                raise Exception("SMS service not configured")
-            
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.api_url}/status/{message_id}",
-                    headers=headers,
+                    f"{self.status_url}/{message_id}",
+                    headers={"api-key": self.api_key},
                     timeout=30.0
                 )
                 
                 if response.status_code == 200:
                     return response.json()
                 else:
-                    logger.error(f"SMS status API error: {response.status_code} - {response.text}")
-                    raise Exception(f"Failed to get SMS status: {response.status_code}")
+                    api_logger.error(f"SMS status check failed: {response.status_code}")
+                    return None
                     
         except Exception as e:
-            logger.error(f"Error getting SMS status: {e}")
-            raise
+            api_logger.error(f"SMS status check error: {str(e)}")
+            return None
+    
+    def is_configured(self) -> bool:
+        """Check if SMS service is properly configured"""
+        return bool(self.api_key and self.sender_id)

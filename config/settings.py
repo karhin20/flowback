@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     secret_key: str = Field(..., env="SECRET_KEY")
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 30
+    signup_code: str = Field("", env="SIGNUP_CODE")
     
     # SMS Configuration
     sms_api_url: Optional[str] = Field(None, env="SMS_API_URL")

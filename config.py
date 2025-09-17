@@ -57,9 +57,6 @@ class Settings:
         required_settings = [
             ("SUPABASE_URL", self.SUPABASE_URL),
             ("SUPABASE_KEY", self.SUPABASE_KEY),
-            ("SMS_API_URL", self.SMS_API_URL),
-            ("SMS_API_KEY", self.SMS_API_KEY),
-            ("SMS_SENDER_ID", self.SMS_SENDER_ID),
             ("SECRET_KEY", self.SECRET_KEY)
         ]
         

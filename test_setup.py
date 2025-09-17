@@ -13,10 +13,9 @@ def test_environment():
     required_vars = [
         "SUPABASE_URL",
         "SUPABASE_KEY",
-        "SMS_API_URL",
-        "SMS_API_KEY",
-        "SMS_SENDER_ID",
-        "SECRET_KEY"
+        "SECRET_KEY",
+        "ARKESEL_API_KEY",
+        "ARKESEL_SENDER_ID"
     ]
     
     missing_vars = []
@@ -69,7 +68,7 @@ def test_imports():
 def test_app_import():
     """Test if the main app can be imported"""
     try:
-        from main import app
+        from index import app
         print("✅ Main app imported successfully")
         return True
     except Exception as e:
@@ -103,7 +102,7 @@ def main():
         print("\nTo start the server, run:")
         print("   python start.py")
         print("\nOr:")
-        print("   uvicorn main:app --reload")
+        print("   uvicorn index:app --reload")
     else:
         print("❌ Some tests failed. Please fix the issues before running the server.")
         sys.exit(1)
