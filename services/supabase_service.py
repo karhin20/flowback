@@ -343,12 +343,23 @@ class SupabaseService:
             db_logger.error(f"Error creating batch customers: {e}")
             raise DatabaseError(f"Error creating batch customers: {str(e)}", "insert")
 
-    async def create_batch_actions(self, actions_data: List[dict]) -> List[CustomerAction]:
-        """Create multiple actions in a batch"""
+    async def create_batch_actions(self, actions_data: List[Any]) -> List[CustomerAction]:
+        """Create multiple actions in a batch. Accepts dicts or Pydantic models."""
         try:
-            # actions_data is already a list of dictionaries
-            result = self.client.table("customer_actions").insert(actions_data).execute()
-            return [CustomerAction(**row) for row in result.data]
+            # Normalize to list[dict]
+            normalized: List[dict] = []
+            for item in actions_data:
+                if isinstance(item, dict):
+                    normalized.append(item)
+                elif hasattr(item, "dict") and callable(getattr(item, "dict")):
+                    normalized.append(item.dict())
+                else:
+                    raise ValidationError(f"Unsupported action item type: {type(item).__name__}")
+
+            result = self.client.table("customer_actions").insert(normalized).execute()
+            return [CustomerAction(**row) for row in (result.data or [])]
+        except (ValidationError, DatabaseError):
+            raise
         except Exception as e:
             db_logger.error(f"Error creating batch actions: {e}")
             raise DatabaseError(f"Error creating batch actions: {str(e)}", "insert")

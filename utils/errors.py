@@ -90,11 +90,16 @@ class DatabaseError(InsightOpsError):
     """Raised when database operation fails"""
     
     def __init__(self, message: str, operation: str, details: Optional[Dict[str, Any]] = None):
+        # Merge details safely even if None
+        safe_details: Dict[str, Any] = {}
+        if details:
+            safe_details.update(details)
+        safe_details["operation"] = operation
         super().__init__(
             message=message,
             error_code=ErrorCode.DATABASE_QUERY_ERROR,
             status_code=500,
-            details={**details, "operation": operation}
+            details=safe_details
         )
 
 def create_http_exception(error: InsightOpsError) -> HTTPException:
