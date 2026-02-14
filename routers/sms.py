@@ -8,7 +8,7 @@ from supabase import Client
 from database import get_db
 from services.supabase_service import SupabaseService
 from services.sms_service import SMSService
-from utils.security import get_current_user
+from utils.security import get_current_user, resolve_display_name
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -123,7 +123,7 @@ async def send_custom_sms(
         recipients=[customer.phone], 
         message=message, 
         action_type="sms_sent",
-        performed_by=current_user.email,
+        performed_by=resolve_display_name(current_user, db),
         db=db,
         customer_id=customer.id
     )
@@ -151,7 +151,7 @@ async def send_warning_sms(
         recipients=[customer.phone], 
         message=message, 
         action_type="warn",
-        performed_by=current_user.email,
+        performed_by=resolve_display_name(current_user, db),
         db=db,
         customer_id=customer.id
     )
@@ -179,7 +179,7 @@ async def send_disconnection_sms(
         recipients=[customer.phone], 
         message=message, 
         action_type="disconnect",
-        performed_by=current_user.email,
+        performed_by=resolve_display_name(current_user, db),
         db=db,
         customer_id=customer.id
     )
@@ -208,7 +208,7 @@ async def send_connection_sms(
         recipients=[customer.phone], 
         message=message, 
         action_type="connect",
-        performed_by=current_user.email,
+        performed_by=resolve_display_name(current_user, db),
         db=db,
         customer_id=customer.id
     )

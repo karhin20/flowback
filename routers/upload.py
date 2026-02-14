@@ -13,7 +13,7 @@ from models import (
 from supabase import Client
 from utils.logger import api_logger
 from utils.errors import DatabaseError, create_http_exception
-from utils.security import get_current_user
+from utils.security import get_current_user, resolve_display_name
 
 router = APIRouter()
 
@@ -151,15 +151,7 @@ async def process_batch_upload(
             try:
                 created_customers = await service.create_batch_customers(new_customer_models)
                 for customer in created_customers:
-                    # Use current user's display name or email for performed_by
-                    user_meta = getattr(current_user, 'user_metadata', {}) or {}
-                    performed_by = (
-                        user_meta.get('name') or
-                        user_meta.get('full_name') or
-                        user_meta.get('display_name') or
-                        user_meta.get('displayName') or
-                        current_user.email or "System"
-                    )
+                    performed_by = resolve_display_name(current_user, db)
                     actions_to_create.append({
                         "customer_id": customer.id,
                         "action": "connect",
@@ -180,15 +172,7 @@ async def process_batch_upload(
                     update_payload = CustomerUpdate(status="connected", arrears=item_data.arrears)
                     await service.update_customer(customer_id, update_payload)
                     updated_customer_ids.append(customer_id)
-                    # Use current user's display name or email for performed_by
-                    user_meta = getattr(current_user, 'user_metadata', {}) or {}
-                    performed_by = (
-                        user_meta.get('name') or
-                        user_meta.get('full_name') or
-                        user_meta.get('display_name') or
-                        user_meta.get('displayName') or
-                        current_user.email or "System"
-                    )
+                    performed_by = resolve_display_name(current_user, db)
                     actions_to_create.append({
                         "customer_id": customer_id,
                         "action": "connect",
