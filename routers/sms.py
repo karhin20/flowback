@@ -41,8 +41,7 @@ async def _send_sms_with_tracking(recipients: List[str], message: str, action_ty
                 "customer_id": customer_id,
                 "action": action_type,
                 "performed_by": performed_by,
-                "source": "manual",
-                "details": details
+                "source": "manual"
             })
         
         total_recipients = result.get("total_recipients", len(recipients))

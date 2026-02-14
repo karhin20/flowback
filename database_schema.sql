@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS customer_actions (
     performed_by VARCHAR(255) NOT NULL,
     source VARCHAR(20) DEFAULT 'manual' CHECK (source IN ('manual', 'batch')),
     batch_id UUID,
+    details JSONB DEFAULT '{}'::jsonb,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

@@ -30,15 +30,21 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Client = Dep
 def resolve_display_name(current_user: User, db: Client) -> str:
     """
     Resolve the user's display name from the profiles (users) table.
+    Bypasses RLS by using service_client if available.
     Falls back to user_metadata.name, then email.
     """
+    from database import db_config
+    
+    # Use service client to bypass RLS for profile lookup
+    lookup_db = db_config.service_client or db
+    
     try:
         # Get user ID regardless of if it's a Pydantic model or dict
         user_id = getattr(current_user, 'id', None) or (current_user.get('id') if isinstance(current_user, dict) else None)
         
         if user_id:
             # Check profiles table
-            profile_resp = db.table("users").select("display_name").eq("id", user_id).limit(1).execute()
+            profile_resp = lookup_db.table("users").select("display_name").eq("id", user_id).limit(1).execute()
             if profile_resp.data and len(profile_resp.data) > 0:
                 display_name = profile_resp.data[0].get("display_name")
                 if display_name:
@@ -53,11 +59,12 @@ def resolve_display_name(current_user: User, db: Client) -> str:
     elif isinstance(current_user, dict):
         user_meta = current_user.get('user_metadata', {}) or {}
     
-    # Try various metadata keys
+    # Try various metadata keys, including raw_user_meta which Supabase sometimes uses
     name = (
         user_meta.get('name') or
         user_meta.get('full_name') or
         user_meta.get('display_name') or
+        user_meta.get('user_name') or
         (getattr(current_user, 'email', None) if not isinstance(current_user, dict) else current_user.get('email'))
     )
     
