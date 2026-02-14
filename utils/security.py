@@ -68,6 +68,10 @@ def resolve_display_name(current_user: User, db: Client) -> str:
         (getattr(current_user, 'email', None) if not isinstance(current_user, dict) else current_user.get('email'))
     )
     
+    if name and "@" in name:
+        # If it's an email, return the prefix as a friendly name
+        return name.split("@")[0]
+    
     if name:
         return name
         

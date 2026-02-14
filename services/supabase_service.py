@@ -440,7 +440,7 @@ class SupabaseService:
         This table is used for resolving display names and roles in the app.
         """
         try:
-            display_name = metadata.get("name") or metadata.get("display_name") or email.split("@")[0].title()
+            display_name = metadata.get("name") or metadata.get("display_name") or metadata.get("user_name") or email.split("@")[0]
             role = metadata.get("role") or "user"
             
             user_data = {
