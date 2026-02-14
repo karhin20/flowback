@@ -4,9 +4,8 @@ from pydantic import BaseModel
 from supabase import Client
 from database import get_db
 from services.supabase_service import SupabaseService
-from models import MessageTemplate, User
-from utils.logger import api_logger
-from utils.security import get_current_user
+from utils.security import get_current_user, resolve_display_name
+from models import MessageTemplate, User, SystemAuditLogCreate
 
 router = APIRouter()
 
@@ -39,5 +38,16 @@ async def update_message_template(action: str, template_update: MessageTemplateU
             status_code=404,
             detail=f"Template for action '{action}' not found."
         )
+
+    # Log template update
+    try:
+        await service.log_system_event(SystemAuditLogCreate(
+            action_category="TEMPLATE",
+            action_type="UPDATE",
+            performed_by=resolve_display_name(current_user, db),
+            details={"action": action, "message": template_update.message}
+        ))
+    except Exception:
+        pass
 
     return updated_template

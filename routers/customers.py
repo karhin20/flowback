@@ -4,7 +4,7 @@ from database import get_db
 from services.supabase_service import SupabaseService
 from models import (
     Customer, CustomerCreate, CustomerUpdate, CustomerFilters, 
-    PaginatedResponse, DashboardData, User
+    PaginatedResponse, DashboardData, User, SystemAuditLogCreate
 )
 from supabase import Client
 from websocket_manager import websocket_manager
@@ -14,7 +14,7 @@ from utils.errors import (
     create_http_exception, get_user_friendly_message
 )
 from utils.validators import validate_pagination
-from utils.security import get_current_user
+from utils.security import get_current_user, resolve_display_name
 from contextvars import ContextVar
 import uuid
 
@@ -27,7 +27,8 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 async def create_customer(
     customer: CustomerCreate,
     request: Request,
-    db: Client = Depends(get_db)
+    db: Client = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Create a new customer"""
     # Set request context
@@ -44,6 +45,18 @@ async def create_customer(
         await websocket_manager.broadcast_customer_created(new_customer.dict())
         
         api_logger.info("Customer created successfully", request_id=request_id, customer_id=new_customer.id)
+        
+        # Log to system audit trail
+        try:
+            await service.log_system_event(SystemAuditLogCreate(
+                action_category="CUSTOMER",
+                action_type="CREATE",
+                performed_by=resolve_display_name(current_user, db),
+                details={"account_number": new_customer.account_number, "name": new_customer.name}
+            ))
+        except Exception as e:
+            api_logger.warning("Failed to log customer creation to audit trail", error=e)
+            
         return new_customer
         
     except (CustomerAlreadyExistsError, DatabaseError) as e:
@@ -191,7 +204,8 @@ async def update_customer(
 @router.delete("/{customer_id}")
 async def delete_customer(
     customer_id: str,
-    db: Client = Depends(get_db)
+    db: Client = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Delete a customer"""
     try:
@@ -203,6 +217,17 @@ async def delete_customer(
         # Broadcast WebSocket update
         await websocket_manager.broadcast_customer_deleted(customer_id)
         
+        # Log to system audit trail
+        try:
+            await service.log_system_event(SystemAuditLogCreate(
+                action_category="CUSTOMER",
+                action_type="DELETE",
+                performed_by=resolve_display_name(current_user, db),
+                details={"customer_id": customer_id}
+            ))
+        except Exception as e:
+            api_logger.warning("Failed to log customer deletion to audit trail", error=e)
+
         return {"message": "Customer deleted successfully"}
     except HTTPException:
         raise

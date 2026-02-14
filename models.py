@@ -215,6 +215,25 @@ class PaginatedResponse(BaseModel):
     limit: int
     pages: int
 
+    pages: int
+
+# Audit Log Models
+class SystemAuditLogBase(BaseModel):
+    action_category: str # 'USER', 'CUSTOMER', 'TEMPLATE', 'SYSTEM'
+    action_type: str     # 'CREATE', 'UPDATE', 'DELETE', 'LOGIN', etc.
+    details: Optional[dict] = Field(default_factory=dict)
+    performed_by: str
+
+class SystemAuditLogCreate(SystemAuditLogBase):
+    pass
+
+class SystemAuditLog(SystemAuditLogBase):
+    id: str
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
 # Auth/User Models
 class User(BaseModel):
     id: str

@@ -24,6 +24,16 @@ CREATE TABLE IF NOT EXISTS customer_actions (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create system_audit_log table for administrative and system-wide events
+CREATE TABLE IF NOT EXISTS system_audit_log (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    action_category VARCHAR(50) NOT NULL, -- 'USER', 'CUSTOMER', 'TEMPLATE', 'SYSTEM'
+    action_type VARCHAR(50) NOT NULL,     -- 'CREATE', 'UPDATE', 'DELETE', 'LOGIN', etc.
+    details JSONB DEFAULT '{}'::jsonb,    -- Metadata about what changed
+    performed_by VARCHAR(255) NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status);
 CREATE INDEX IF NOT EXISTS idx_customers_account_number ON customers(account_number);
@@ -38,6 +48,11 @@ CREATE INDEX IF NOT EXISTS idx_customer_actions_batch_id ON customer_actions(bat
 CREATE INDEX IF NOT EXISTS idx_customer_actions_action ON customer_actions(action);
 CREATE INDEX IF NOT EXISTS idx_customer_actions_source ON customer_actions(source);
 CREATE INDEX IF NOT EXISTS idx_customer_actions_performed_by ON customer_actions(performed_by);
+
+CREATE INDEX IF NOT EXISTS idx_system_audit_timestamp ON system_audit_log(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_system_audit_category ON system_audit_log(action_category);
+CREATE INDEX IF NOT EXISTS idx_system_audit_type ON system_audit_log(action_type);
+CREATE INDEX IF NOT EXISTS idx_system_audit_performed_by ON system_audit_log(performed_by);
 
 -- Composite indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_customers_status_created ON customers(status, created_at DESC);

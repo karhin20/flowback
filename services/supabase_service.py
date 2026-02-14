@@ -1,7 +1,10 @@
 from supabase import Client
 from typing import List, Optional, Dict, Any
 from typing import Any
-from models import Customer, CustomerCreate, CustomerUpdate, CustomerAction, CustomerActionCreate, User
+from models import (
+    Customer, CustomerCreate, CustomerUpdate, CustomerAction, 
+    CustomerActionCreate, User, SystemAuditLog, SystemAuditLogCreate
+)
 from config.settings import settings
 from utils.logger import db_logger
 from utils.errors import (
@@ -424,3 +427,34 @@ class SupabaseService:
         except Exception as e:
             db_logger.error(f"Error signing up user {email}: {e}")
             return None
+
+    # System Audit operations
+    async def log_system_event(self, log_data: SystemAuditLogCreate) -> Optional[SystemAuditLog]:
+        """Log a system-wide or administrative event"""
+        try:
+            db_logger.info("Logging system event", category=log_data.action_category, type=log_data.action_type)
+            result = self.client.table("system_audit_log").insert(log_data.dict()).execute()
+            if result.data:
+                return SystemAuditLog(**result.data[0])
+            return None
+        except Exception as e:
+            db_logger.error("Error logging system event", error=e)
+            return None
+
+    async def get_system_audit_logs(self, category: str = None, page: int = 1, limit: int = 50) -> List[SystemAuditLog]:
+        """Fetch system audit logs with optional filtering"""
+        try:
+            query = self.client.table("system_audit_log").select("*")
+            
+            if category and category != "all":
+                query = query.eq("action_category", category.upper())
+            
+            # Add pagination and ordering
+            offset = (page - 1) * limit
+            query = query.order("timestamp", desc=True).range(offset, offset + limit - 1)
+            
+            result = query.execute()
+            return [SystemAuditLog(**row) for row in (result.data or [])]
+        except Exception as e:
+            db_logger.error("Error fetching system audit logs", error=e)
+            raise DatabaseError(f"Error fetching system audit logs: {str(e)}", "select")

@@ -6,7 +6,8 @@ from database import get_db
 from services.supabase_service import SupabaseService
 from models import User
 from utils.logger import api_logger
-from utils.security import get_current_user
+from utils.security import get_current_user, resolve_display_name
+from models import SystemAuditLogCreate
 from config.settings import settings
 
 router = APIRouter()
@@ -46,6 +47,18 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
             api_logger.info(f"Login successful for user: {form_data.username}")
             # user is a pydantic-like model; use dict() if available
             user_payload = auth_response.user.dict() if hasattr(auth_response.user, 'dict') else auth_response.user
+            
+            # Log successful login
+            try:
+                await service.log_system_event(SystemAuditLogCreate(
+                    action_category="USER",
+                    action_type="LOGIN",
+                    performed_by=form_data.username,
+                    details={"email": form_data.username}
+                ))
+            except Exception:
+                pass
+                
             return {"access_token": auth_response.session.access_token, "token_type": "bearer", "user": user_payload}
         
         api_logger.warning(f"Failed login attempt for user: {form_data.username}")
@@ -78,6 +91,18 @@ async def register_user(
         )
     
     api_logger.info(f"User {user_data.email} created successfully.")
+    
+    # Log user registration
+    try:
+        await service.log_system_event(SystemAuditLogCreate(
+            action_category="USER",
+            action_type="REGISTER",
+            performed_by=resolve_display_name(current_user, db),
+            details={"new_user_email": user_data.email, "role": user_data.role, "name": user_data.name}
+        ))
+    except Exception:
+        pass
+
     return new_user
 
 class PublicUserCreate(BaseModel):

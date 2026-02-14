@@ -8,7 +8,7 @@ from services.supabase_service import SupabaseService
 from models import (
     BatchUploadRequest, BatchUploadResponse, BatchUploadItem, CustomerActionCreate, User,
     CustomerForValidation, CustomerValidationResponse, BatchProcessResponse, CustomerCreate,
-    CustomerUpdate
+    CustomerUpdate, SystemAuditLogCreate
 )
 from supabase import Client
 from utils.logger import api_logger
@@ -201,6 +201,22 @@ async def process_batch_upload(
                        customers_updated=customers_updated,
                        actions_created=len(created_actions))
         
+        # Log to system audit trail
+        try:
+            await service.log_system_event(SystemAuditLogCreate(
+                action_category="SYSTEM",
+                action_type="BATCH_PROCESS",
+                performed_by=resolve_display_name(current_user, db),
+                details={
+                    "batch_id": batch_request.batch_id,
+                    "customers_created": customers_created,
+                    "customers_updated": customers_updated,
+                    "actions_created": len(created_actions)
+                }
+            ))
+        except Exception as e:
+            api_logger.warning("Failed to log batch process to audit trail", error=e)
+
         return BatchProcessResponse(
             message=f"Batch processed. Created {customers_created} new customers, updated {customers_updated} existing customers.",
             actions_created=len(created_actions),

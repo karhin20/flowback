@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 
 from database import init_db
-from routers import customers, actions, sms, upload, websocket, templates, auth
+from routers import customers, actions, sms, upload, websocket, templates, auth, audit
 from config.settings import settings
 
 # Load environment variables
@@ -50,6 +50,7 @@ app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
 app.include_router(websocket.router, tags=["websocket"])
 app.include_router(templates.router, prefix="/api/templates", tags=["Templates"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
 
 @app.get("/")
 async def root():
