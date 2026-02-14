@@ -29,11 +29,20 @@ async def _send_sms_with_tracking(recipients: List[str], message: str, action_ty
         # Log the action in database if customer_id provided
         if customer_id:
             service = SupabaseService(db)
+            customer = await service.get_customer(customer_id)
+            details = {}
+            if customer:
+                details = {
+                    "arrears": customer.arrears,
+                    "phone": customer.phone,
+                    "status": customer.status
+                }
             await service.create_action({
                 "customer_id": customer_id,
                 "action": action_type,
                 "performed_by": performed_by,
-                "source": "manual"
+                "source": "manual",
+                "details": details
             })
         
         total_recipients = result.get("total_recipients", len(recipients))
@@ -89,7 +98,7 @@ async def send_bulk_sms(
         successful_batches = result.get("successful_batches", 1)
         
         api_logger.info(f"Bulk SMS sent to {total_recipients} recipients in {successful_batches} batches", 
-                       performed_by=current_user.email)
+                       performed_by=resolve_display_name(current_user, db))
         
         return {
             "status": "success", 
@@ -235,7 +244,7 @@ async def get_sms_status(
             response.raise_for_status()
             response_data = response.json()
             api_logger.info(f"SMS status checked for message_id {message_id}", 
-                           performed_by=current_user.email)
+                           performed_by=resolve_display_name(current_user, db))
             return response_data
         except httpx.RequestError as e:
             api_logger.error(f"HTTP error checking SMS status: {e}")
@@ -270,7 +279,7 @@ async def send_scheduled_sms(
             raise HTTPException(status_code=502, detail=f"Failed to schedule SMS: {error_msg}")
         
         api_logger.info(f"Scheduled SMS created for {len(request['recipients'])} recipients", 
-                       performed_by=current_user.email, scheduled_date=request["scheduled_date"])
+                       performed_by=resolve_display_name(current_user, db), scheduled_date=request["scheduled_date"])
         
         return {
             "status": "success", 
@@ -310,7 +319,7 @@ async def send_sms_with_webhook(
             raise HTTPException(status_code=502, detail=f"Failed to send SMS with webhook: {error_msg}")
         
         api_logger.info(f"SMS with webhook sent to {len(request['recipients'])} recipients", 
-                       performed_by=current_user.email, callback_url=request["callback_url"])
+                       performed_by=resolve_display_name(current_user, db), callback_url=request["callback_url"])
         
         return {
             "status": "success", 

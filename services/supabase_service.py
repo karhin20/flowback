@@ -417,31 +417,49 @@ class SupabaseService:
                 }
             })
             db_logger.info(f"User sign-up successful for email: {email}")
-            
             if user_response and getattr(user_response, 'user', None):
-                user = user_response.user
-                # Create profile in public.users table
+                # Sync to public.users table immediately
+                await self.sync_user_profile(
+                    user_id=user_response.user.id,
+                    email=email,
+                    metadata=data
+                )
                 try:
-                    profile_data = {
-                        "id": user.id,
-                        "email": email,
-                        "display_name": data.get("name"),
-                        "role": data.get("role", "user")
-                    }
-                    self.client.table("users").upsert(profile_data).execute()
-                    db_logger.info(f"Public profile created for user: {email}")
-                except Exception as ex:
-                    db_logger.error(f"Failed to create public profile for user {email}: {ex}")
-                
-                try:
-                    return User(**user.dict())
+                    return User(**user_response.user.dict())
                 except Exception:
                     # Fallback to returning raw user if structure differs
-                    return user
+                    return user_response.user
             return None
         except Exception as e:
             db_logger.error(f"Error signing up user {email}: {e}")
             return None
+
+    async def sync_user_profile(self, user_id: str, email: str, metadata: dict) -> bool:
+        """
+        Sync user information to the public.users table.
+        This table is used for resolving display names and roles in the app.
+        """
+        try:
+            display_name = metadata.get("name") or metadata.get("display_name") or email.split("@")[0].title()
+            role = metadata.get("role") or "user"
+            
+            user_data = {
+                "id": user_id,
+                "display_name": display_name,
+                "role": role,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            # Use upsert to create or update the profile
+            result = self.client.table("users").upsert(user_data).execute()
+            
+            if result.data:
+                db_logger.info(f"User profile synced for {email}", user_id=user_id)
+                return True
+            return False
+        except Exception as e:
+            db_logger.error(f"Failed to sync user profile for {user_id}: {e}")
+            return False
 
     # System Audit operations
     async def log_system_event(self, log_data: SystemAuditLogCreate) -> Optional[SystemAuditLog]:

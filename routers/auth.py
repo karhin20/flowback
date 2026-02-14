@@ -48,25 +48,21 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
             # user is a pydantic-like model; use dict() if available
             user_payload = auth_response.user.dict() if hasattr(auth_response.user, 'dict') else auth_response.user
             
-            # Sync profile to public.users table on login
+            # Sync profile on login to ensure it exists and is up to date
+            user_metadata = getattr(auth_response.user, 'user_metadata', {}) or {}
+            await service.sync_user_profile(
+                user_id=auth_response.user.id,
+                email=form_data.username,
+                metadata=user_metadata
+            )
+            
+            # Log successful login using display name
             try:
-                user_meta = user_payload.get('user_metadata', {})
-                profile_data = {
-                    "id": auth_response.user.id,
-                    "email": form_data.username,
-                    "display_name": user_meta.get('name') or user_meta.get('full_name'),
-                    "role": user_meta.get('role', 'user')
-                }
-                db.table("users").upsert(profile_data).execute()
-            except Exception as e:
-                api_logger.warning(f"Failed to sync profile on login for {form_data.username}: {e}")
-                
-            # Log successful login
-            try:
+                display_name = resolve_display_name(auth_response.user, db)
                 await service.log_system_event(SystemAuditLogCreate(
                     action_category="USER",
                     action_type="LOGIN",
-                    performed_by=resolve_display_name(auth_response.user, db),
+                    performed_by=display_name,
                     details={"email": form_data.username}
                 ))
             except Exception:
@@ -95,6 +91,7 @@ async def register_user(
 
     user_metadata = {"name": user_data.name, "role": user_data.role}
     new_user = await service.sign_up(email=user_data.email, password=user_data.password, data=user_metadata)
+    # Note: service.sign_up already calls sync_user_profile
 
     if not new_user:
         api_logger.error(f"User registration failed for: {user_data.email}")

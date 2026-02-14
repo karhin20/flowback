@@ -33,22 +33,35 @@ def resolve_display_name(current_user: User, db: Client) -> str:
     Falls back to user_metadata.name, then email.
     """
     try:
-        profile_resp = db.table("users").select("display_name").eq("id", current_user.id).limit(1).execute()
-        if profile_resp.data and len(profile_resp.data) > 0:
-            display_name = profile_resp.data[0].get("display_name")
-            if display_name:
-                return display_name
+        # Get user ID regardless of if it's a Pydantic model or dict
+        user_id = getattr(current_user, 'id', None) or (current_user.get('id') if isinstance(current_user, dict) else None)
+        
+        if user_id:
+            # Check profiles table
+            profile_resp = db.table("users").select("display_name").eq("id", user_id).limit(1).execute()
+            if profile_resp.data and len(profile_resp.data) > 0:
+                display_name = profile_resp.data[0].get("display_name")
+                if display_name:
+                    return display_name
     except Exception as e:
-        api_logger.warning(f"Note: Could not query users table for {current_user.id} (might not exist yet): {e}")
+        api_logger.error(f"Failed to resolve display_name from profiles: {e}")
 
-    # Fallback to user_metadata (check multiple possible keys)
-    user_meta = getattr(current_user, 'user_metadata', {}) or {}
+    # Fallback to user_metadata
+    user_meta = {}
+    if hasattr(current_user, 'user_metadata') and current_user.user_metadata:
+        user_meta = current_user.user_metadata
+    elif isinstance(current_user, dict):
+        user_meta = current_user.get('user_metadata', {}) or {}
     
-    # Try common name keys
-    for key in ['name', 'full_name', 'display_name', 'Name', 'FullName']:
-        name = user_meta.get(key)
-        if name and isinstance(name, str) and name.strip():
-            return name.strip()
-            
-    # Last resort: Email or System
-    return current_user.email or "System"
+    # Try various metadata keys
+    name = (
+        user_meta.get('name') or
+        user_meta.get('full_name') or
+        user_meta.get('display_name') or
+        (getattr(current_user, 'email', None) if not isinstance(current_user, dict) else current_user.get('email'))
+    )
+    
+    if name:
+        return name
+        
+    return "System"
