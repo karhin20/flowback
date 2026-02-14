@@ -13,6 +13,17 @@ CREATE TABLE IF NOT EXISTS customers (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create users table (public profile linked to auth.users)
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email VARCHAR(255),
+    display_name VARCHAR(255),
+    role VARCHAR(50) DEFAULT 'user',
+    avatar_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Create customer_actions table
 CREATE TABLE IF NOT EXISTS customer_actions (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,

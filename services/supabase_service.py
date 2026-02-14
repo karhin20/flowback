@@ -417,12 +417,27 @@ class SupabaseService:
                 }
             })
             db_logger.info(f"User sign-up successful for email: {email}")
+            
             if user_response and getattr(user_response, 'user', None):
+                user = user_response.user
+                # Create profile in public.users table
                 try:
-                    return User(**user_response.user.dict())
+                    profile_data = {
+                        "id": user.id,
+                        "email": email,
+                        "display_name": data.get("name"),
+                        "role": data.get("role", "user")
+                    }
+                    self.client.table("users").upsert(profile_data).execute()
+                    db_logger.info(f"Public profile created for user: {email}")
+                except Exception as ex:
+                    db_logger.error(f"Failed to create public profile for user {email}: {ex}")
+                
+                try:
+                    return User(**user.dict())
                 except Exception:
                     # Fallback to returning raw user if structure differs
-                    return user_response.user
+                    return user
             return None
         except Exception as e:
             db_logger.error(f"Error signing up user {email}: {e}")

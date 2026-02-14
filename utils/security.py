@@ -39,14 +39,16 @@ def resolve_display_name(current_user: User, db: Client) -> str:
             if display_name:
                 return display_name
     except Exception as e:
-        api_logger.error(f"Failed to resolve display_name for user {current_user.id}: {e}")
+        api_logger.warning(f"Note: Could not query users table for {current_user.id} (might not exist yet): {e}")
 
-    # Fallback to user_metadata
+    # Fallback to user_metadata (check multiple possible keys)
     user_meta = getattr(current_user, 'user_metadata', {}) or {}
-    return (
-        user_meta.get('name') or
-        user_meta.get('full_name') or
-        user_meta.get('display_name') or
-        current_user.email or
-        "System"
-    )
+    
+    # Try common name keys
+    for key in ['name', 'full_name', 'display_name', 'Name', 'FullName']:
+        name = user_meta.get(key)
+        if name and isinstance(name, str) and name.strip():
+            return name.strip()
+            
+    # Last resort: Email or System
+    return current_user.email or "System"
